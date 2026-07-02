@@ -89,6 +89,51 @@ func TestErrorDetailSurfaced(t *testing.T) {
 	}
 }
 
+func TestListRepliesUsesTokenSeedHeader(t *testing.T) {
+	c, srv := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/replies" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		if r.Header.Get("X-Chariot-Token") != "ts_seed" {
+			t.Errorf("X-Chariot-Token = %q", r.Header.Get("X-Chariot-Token"))
+		}
+		if got := r.URL.Query().Get("after"); got != "7" {
+			t.Errorf("after = %q", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "50" {
+			t.Errorf("limit = %q", got)
+		}
+		w.Write([]byte(`{"replies":[{"id":8,"agent_id":"a-1","message":"hi","reply_to":null,"created_at":"2026-07-01T00:00:00Z"}],"next_cursor":8}`))
+	})
+	defer srv.Close()
+
+	page, err := c.ListReplies(context.Background(), "ts_seed", 7, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Replies) != 1 || page.Replies[0].ID != 8 || page.Replies[0].Message != "hi" {
+		t.Fatalf("unexpected replies: %+v", page.Replies)
+	}
+	if page.NextCursor != 8 {
+		t.Fatalf("next_cursor = %d", page.NextCursor)
+	}
+}
+
+func TestListRepliesEmpty(t *testing.T) {
+	c, srv := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"replies":[],"next_cursor":7}`))
+	})
+	defer srv.Close()
+
+	page, err := c.ListReplies(context.Background(), "ts_seed", 7, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Replies) != 0 || page.NextCursor != 7 {
+		t.Fatalf("unexpected: %+v", page)
+	}
+}
+
 func TestSendMessageUsesTokenSeedHeader(t *testing.T) {
 	c, srv := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/agents/a-123/messages" {

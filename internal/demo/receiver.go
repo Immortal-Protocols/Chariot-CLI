@@ -45,6 +45,21 @@ func Handler(out io.Writer, now func() time.Time) http.Handler {
 	})
 }
 
+// PrintReply writes one reply in the same shape the webhook receiver uses:
+//
+//	[HH:MM:SS] agent <id> [· reply-to <ref>]
+//	  <message>
+//
+// It's shared by `chariot demo serve` (webhook path) and `chariot demo watch`
+// (inbox-poll path) so both render replies identically.
+func PrintReply(out io.Writer, at time.Time, agentID, replyTo, message string) {
+	fmt.Fprintf(out, "[%s] agent %s", at.Format("15:04:05"), agentID)
+	if replyTo != "" {
+		fmt.Fprintf(out, " · reply-to %s", replyTo)
+	}
+	fmt.Fprintf(out, "\n  %s\n\n", message)
+}
+
 func printDelivery(out io.Writer, at time.Time, r *http.Request, body []byte) {
 	stamp := at.Format("15:04:05")
 	var reply Reply

@@ -185,6 +185,35 @@ func (c *Client) SendMessage(ctx context.Context, agentID, tokenSeed, message st
 	return out, nil
 }
 
+// Reply is one stored agent reply from the inbox (GET /v1/replies).
+type Reply struct {
+	ID        int64  `json:"id"`
+	AgentID   string `json:"agent_id"`
+	Message   string `json:"message"`
+	ReplyTo   string `json:"reply_to"`
+	CreatedAt string `json:"created_at"`
+}
+
+// ReplyPage is one poll of the reply inbox. NextCursor is the highest id
+// returned (or the request's after when empty) — pass it back as after.
+type ReplyPage struct {
+	Replies    []Reply `json:"replies"`
+	NextCursor int64   `json:"next_cursor"`
+}
+
+// ListReplies polls the reply inbox for replies with id > after. It
+// authenticates with the token-seed (X-Chariot-Token header), the same
+// credential `chariot demo send` uses — no login needed.
+func (c *Client) ListReplies(ctx context.Context, tokenSeed string, after int64, limit int) (*ReplyPage, error) {
+	path := fmt.Sprintf("/v1/replies?after=%d&limit=%d", after, limit)
+	out := &ReplyPage{}
+	if _, err := c.doHeaders(ctx, http.MethodGet, path,
+		map[string]string{"X-Chariot-Token": tokenSeed}, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 type Account struct {
 	Email         string         `json:"email"`
 	Status        string         `json:"status"`

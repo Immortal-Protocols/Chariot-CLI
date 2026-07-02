@@ -20,9 +20,10 @@ Typical flow:
   chariot deploy --count 10000 --endpoint URL    # spin up a fleet
   chariot list                                   # see your agents + their ids
 
-Try the round-trip without writing a backend:
-  chariot demo serve                             # print replies sent to --endpoint
-  chariot demo send <agent-id> "hello"           # message an agent (token-seed auth)`,
+Try the round-trip without writing a backend (no tunnel needed):
+  chariot deploy --count 10                      # no --endpoint: replies are stored
+  chariot demo send <agent-id> "hello"           # message an agent (token-seed auth)
+  chariot demo watch                             # poll and print replies as they arrive`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
