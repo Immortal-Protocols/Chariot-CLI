@@ -14,6 +14,8 @@ chariot demo watch                                   # poll the reply inbox
 ## Install
 
 ```bash
+brew install immortal-protocols/tap/chariot
+# or via Go:
 go install github.com/Immortal-Protocols/Chariot-CLI@latest
 # or build locally:
 go build -o chariot .

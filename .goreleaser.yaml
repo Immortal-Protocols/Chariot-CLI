@@ -1,0 +1,47 @@
+version: 2
+
+project_name: chariot
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: chariot
+    binary: chariot
+    main: .
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/Immortal-Protocols/Chariot-CLI/cmd.Version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+
+brews:
+  - name: chariot
+    repository:
+      owner: Immortal-Protocols
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://app.chariots.sh
+    description: Deploy and manage enterprise agent fleets from your terminal
+    install: |
+      bin.install "chariot"
+    test: |
+      system "#{bin}/chariot", "version"
