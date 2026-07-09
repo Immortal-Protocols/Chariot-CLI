@@ -21,8 +21,8 @@ func TestImagesRendersCatalog(t *testing.T) {
 			 "daily_fee_dollars":0.2,"ready_at":"2026-07-03T00:00:00Z"}
 		],"shared_images":[
 			{"name":"teamtool","owner_email":"alice@chariot.test","image_name":"tool",
-			 "pod_size":"large","default":false,"daily_fee_dollars":0.4,
-			 "ready":true,"share_id":"sh_1"}
+			 "pod_size":"large","accepted_pod_size":"large","default":false,
+			 "daily_fee_dollars":0.4,"status":"active","share_id":"sh_1"}
 		],"default_image":"zeroclaw"}`))
 	})
 

@@ -5,23 +5,25 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Immortal-Protocols/Chariot-CLI/internal/api"
 )
 
 var imageShareWith string
-var imageShareAlias string
 
 var imageShareCmd = &cobra.Command{
 	Use:   "share <name> --with <email>",
-	Short: "Share one of your verified custom images with another account",
-	Long: `Share one of your verified custom images with another Chariot account.
+	Short: "Offer one of your verified custom images to another account",
+	Long: `Offer one of your verified custom images to another Chariot account.
 
-The other account deploys it like any catalog image — ` + "`chariot deploy --image <name>`" + ` —
-and re-pushes of your image flow to their agents automatically (adopted at
-each agent's next wake, exactly like your own fleet). They are billed for
-their own agents; you are never billed for theirs.
-
-By default the image keeps its name on their side. If that name is taken in
-their account, pass --alias to pick the name they will deploy it by.
+Nothing changes on their side until they accept the offer with
+` + "`chariot image accept`" + ` — acceptance is what binds the name they deploy it
+by and the pod tier (daily fee) they agree to. Once accepted, they deploy it
+like any catalog image (` + "`chariot deploy --image <name>`" + `), and re-pushes of
+your image flow to their agents automatically at each agent's next wake —
+unless a re-push raises the pod tier, which stops resolving until they
+re-accept (their fees can never rise without their consent). They are billed
+for their own agents; you are never billed for theirs.
 
 Revoke any time with ` + "`chariot image unshare <name> --with <email>`" + ` — their
 agents fall back to their default image at the next wake.`,
@@ -34,18 +36,68 @@ agents fall back to their default image at the next wake.`,
 		if err != nil {
 			return err
 		}
-		share, err := client.CreateShare(cmd.Context(), args[0], imageShareWith, imageShareAlias)
+		share, err := client.CreateShare(cmd.Context(), args[0], imageShareWith)
 		if err != nil {
 			return err
 		}
 		out := cmd.OutOrStdout()
-		fmt.Fprintf(out, "✓ shared %s with %s", share.ImageName, share.GranteeEmail)
-		if share.Alias != share.ImageName {
-			fmt.Fprintf(out, " (as %s)", share.Alias)
+		fmt.Fprintf(out, "✓ offered %s to %s\n", share.ImageName, share.GranteeEmail)
+		fmt.Fprintf(out, "  Pending their acceptance — they run `chariot image accept %s` to use it.\n",
+			share.ImageName)
+		return nil
+	},
+}
+
+var imageAcceptAlias string
+var imageAcceptFrom string
+
+var imageAcceptCmd = &cobra.Command{
+	Use:   "accept <name>",
+	Short: "Accept an image shared with you (or approve its tier raise)",
+	Long: `Accept an image another account offered you (` + "`chariot image shares`" + ` lists
+pending offers). Acceptance binds the name YOU deploy it by (--alias; defaults
+to the owner's image name) and locks in the current pod tier as the daily-fee
+ceiling: if the owner later re-pushes at a bigger tier, the image stops
+resolving until you accept again, so your fees never rise without consent.
+
+<name> matches the offer's image name (for pending offers) or your alias (to
+re-accept a tier raise). If two owners offered images with the same name,
+disambiguate with --from <owner-email>.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, _, err := authedClient()
+		if err != nil {
+			return err
 		}
-		fmt.Fprintln(out)
-		fmt.Fprintf(out, "  They can now run `chariot deploy --image %s`. Re-pushes of %s flow to them automatically.\n",
-			share.Alias, share.ImageName)
+		shares, err := client.ListShares(cmd.Context())
+		if err != nil {
+			return err
+		}
+		name := args[0]
+		var matches []api.IncomingShare
+		for _, s := range shares.Incoming {
+			if imageAcceptFrom != "" && s.OwnerEmail != imageAcceptFrom {
+				continue
+			}
+			if (s.Alias != nil && *s.Alias == name) || (s.Alias == nil && s.ImageName == name) {
+				matches = append(matches, s)
+			}
+		}
+		if len(matches) == 0 {
+			return fmt.Errorf("no image shared with you named %q — `chariot image shares` lists offers", name)
+		}
+		if len(matches) > 1 {
+			return fmt.Errorf("multiple owners shared %q with you; disambiguate with --from <owner-email>", name)
+		}
+		accepted, err := client.AcceptShare(cmd.Context(), matches[0].ShareID, imageAcceptAlias)
+		if err != nil {
+			return err
+		}
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "✓ accepted %s from %s (pod size %s)\n",
+			accepted.Alias, matches[0].OwnerEmail, accepted.AcceptedPodSize)
+		fmt.Fprintf(out, "  Deploy with `chariot deploy --image %s`. Their re-pushes flow to your agents\n", accepted.Alias)
+		fmt.Fprintln(out, "  automatically — unless the pod tier rises, which needs your re-acceptance.")
 		return nil
 	},
 }
@@ -64,15 +116,16 @@ var imageSharesCmd = &cobra.Command{
 		}
 		out := cmd.OutOrStdout()
 		if len(shares.Outgoing) == 0 && len(shares.Incoming) == 0 {
-			fmt.Fprintln(out, "No image shares. Share one with `chariot image share <name> --with <email>`.")
+			fmt.Fprintln(out, "No image shares. Offer one with `chariot image share <name> --with <email>`.")
 			return nil
 		}
 		if len(shares.Outgoing) > 0 {
 			fmt.Fprintln(out, "SHARED BY YOU")
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "IMAGE\tWITH\tTHEIR NAME")
+			fmt.Fprintln(tw, "IMAGE\tWITH\tTHEIR NAME\tSTATUS")
 			for _, s := range shares.Outgoing {
-				fmt.Fprintf(tw, "%s\t%s\t%s\n", s.ImageName, s.GranteeEmail, s.Alias)
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+					s.ImageName, s.GranteeEmail, orDash(s.Alias), shareStatusText(s.Status))
 			}
 			if err := tw.Flush(); err != nil {
 				return err
@@ -86,14 +139,19 @@ var imageSharesCmd = &cobra.Command{
 			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(tw, "IMAGE\tFROM\tPOD SIZE\tSTATUS")
 			for _, s := range shares.Incoming {
+				name := s.ImageName
+				if s.Alias != nil {
+					name = *s.Alias
+				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-					s.Alias, s.OwnerEmail, orDash(s.PodSize), incomingStatus(s.Ready))
+					name, s.OwnerEmail, orDash(s.PodSize), shareStatusText(s.Status))
 			}
 			if err := tw.Flush(); err != nil {
 				return err
 			}
 		}
-		fmt.Fprintln(out, "\nRemove one with `chariot image unshare <name>` (yours: add --with <email>).")
+		fmt.Fprintln(out, "\nAccept an offer with `chariot image accept <name>`; remove one with")
+		fmt.Fprintln(out, "`chariot image unshare <name>` (yours: add --with <email>).")
 		return nil
 	},
 }
@@ -102,10 +160,11 @@ var imageUnshareWith string
 
 var imageUnshareCmd = &cobra.Command{
 	Use:   "unshare <name>",
-	Short: "Revoke a share you granted, or remove an image shared with you",
+	Short: "Revoke a share you granted, or remove/decline one shared with you",
 	Long: `Revoke a share you granted (` + "`chariot image unshare <name> --with <email>`" + `),
-or remove an image someone shared with you (` + "`chariot image unshare <name>`" + `,
-where <name> is the name it appears under in ` + "`chariot images`" + `).
+or remove an image someone shared with you — accepted or still pending —
+(` + "`chariot image unshare <name>`" + `, where <name> is the name it appears under
+in ` + "`chariot image shares`" + `).
 
 Agents still deployed onto the name fall back to the default image at their
 next wake — they keep running until then.`,
@@ -122,7 +181,7 @@ next wake — they keep running until then.`,
 		name := args[0]
 		out := cmd.OutOrStdout()
 
-		if imageUnshareWith != "" { // owner revoking a grant
+		if imageUnshareWith != "" { // owner revoking a grant/offer
 			for _, s := range shares.Outgoing {
 				if s.ImageName != name || s.GranteeEmail != imageUnshareWith {
 					continue
@@ -137,14 +196,14 @@ next wake — they keep running until then.`,
 			return fmt.Errorf("no share of %q with %s — `chariot image shares` lists them", name, imageUnshareWith)
 		}
 
-		for _, s := range shares.Incoming { // grantee removing a received share
-			if s.Alias != name {
+		for _, s := range shares.Incoming { // grantee removing/declining
+			if !((s.Alias != nil && *s.Alias == name) || (s.Alias == nil && s.ImageName == name)) {
 				continue
 			}
 			if err := client.DeleteShare(cmd.Context(), s.ShareID); err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "✓ removed %s (shared by %s)\n", s.Alias, s.OwnerEmail)
+			fmt.Fprintf(out, "✓ removed %s (shared by %s)\n", name, s.OwnerEmail)
 			fmt.Fprintln(out, "  Agents still deployed onto it fall back to your default image at the next wake.")
 			return nil
 		}
@@ -159,18 +218,30 @@ func orDash(s *string) string {
 	return *s
 }
 
-func incomingStatus(ready bool) string {
-	if ready {
+// shareStatusText renders a share's lifecycle status for humans. The zero
+// coupling to fmt strings elsewhere is deliberate: `images` and `image
+// shares` must describe the same state the same way.
+func shareStatusText(status string) string {
+	switch status {
+	case "pending":
+		return "pending — `chariot image accept`"
+	case "active":
 		return "available"
+	case "owner_repushing":
+		return "unavailable (owner re-pushing)"
+	case "tier_raised":
+		return "needs re-accept (pod tier raised)"
 	}
-	return "unavailable (owner re-pushing)"
+	return status
 }
 
 func init() {
 	imageShareCmd.Flags().StringVar(&imageShareWith, "with", "", "email of the account to share with (required)")
-	imageShareCmd.Flags().StringVar(&imageShareAlias, "alias", "", "name the image goes by on their side (default: its name)")
+	imageAcceptCmd.Flags().StringVar(&imageAcceptAlias, "alias", "", "name the image goes by on your side (default: its name)")
+	imageAcceptCmd.Flags().StringVar(&imageAcceptFrom, "from", "", "owner email, when two owners offered the same name")
 	imageUnshareCmd.Flags().StringVar(&imageUnshareWith, "with", "", "revoke your grant to this email (omit to remove an image shared with you)")
 	imageCmd.AddCommand(imageShareCmd)
+	imageCmd.AddCommand(imageAcceptCmd)
 	imageCmd.AddCommand(imageSharesCmd)
 	imageCmd.AddCommand(imageUnshareCmd)
 }
