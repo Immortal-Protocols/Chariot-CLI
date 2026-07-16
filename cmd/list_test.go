@@ -26,6 +26,32 @@ func TestListRendersDefaultImageForNilImage(t *testing.T) {
 	mustContain(t, got.stderr, "2 agent(s) shown.", "stderr")
 }
 
+// A named agent shows its name in the NAME column; an unnamed one shows "-".
+func TestListRendersNameColumn(t *testing.T) {
+	login(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"agents":[
+			{"id":"a1","slug":"agent-1","name":"researcher","state":"active"},
+			{"id":"a2","slug":"agent-2","name":null,"state":"active"}
+		],"next_cursor":""}`))
+	})
+
+	got := runCLI(t, "", "list")
+	if got.err != nil {
+		t.Fatalf("list: %v", got.err)
+	}
+	mustContain(t, got.stdout, "NAME", "header")
+	mustContain(t, got.stdout, "researcher", "stdout")
+	for _, line := range strings.Split(got.stdout, "\n") {
+		if !strings.Contains(line, "agent-2") {
+			continue
+		}
+		// Columns: AGENT ID, SLUG, NAME, ... — the unnamed agent renders "-".
+		if fields := strings.Fields(line); len(fields) < 3 || fields[2] != "-" {
+			t.Errorf("unnamed agent must render a - placeholder: %q", line)
+		}
+	}
+}
+
 // Without --all, list stops after one page and says more is available.
 func TestListStopsAtOnePageAndHintsAll(t *testing.T) {
 	pages := 0

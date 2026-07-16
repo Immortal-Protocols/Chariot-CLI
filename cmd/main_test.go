@@ -23,6 +23,7 @@ func resetFlags() {
 	hibernateAfterSetAgent = ""
 	listLimit, listAll = 50, false
 	deleteYes = false
+	renameClear = false
 	imagePushTarball, imagePushReplace, imagePushPodSize = "", false, "small"
 	fleetCreateImages, fleetCreateDescription, fleetDeleteYes = nil, "", false
 	fleetSkillFrom = ""

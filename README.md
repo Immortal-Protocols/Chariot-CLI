@@ -10,6 +10,7 @@ production is your service's job, via the [HTTP API](https://app.chariots.sh/doc
 chariot login                                        # authenticate (opens browser)
 chariot deploy --count 10000 --endpoint https://…    # spin up a fleet
 chariot list                                         # agents + their ids
+chariot rename agent-000003 researcher               # name an agent; the name works anywhere an id/slug does
 chariot hibernate my-agent-3                         # pause one agent's compute; keep its session state
 chariot account                                      # credits + status
 chariot api                                          # HTTP API reference for your service
@@ -67,9 +68,15 @@ agent, image, fleet, SSH, or API operations.
 - `hibernating`: the pod is scaled to 0 after the idle window, or immediately
   with `chariot hibernate <agent>`. Session state is kept, compute billing
   stops, and the next message wakes the agent.
-- `deleted`: `chariot delete <agent-id>` permanently tears down the agent's
+- `deleted`: `chariot delete <agent>` permanently tears down the agent's
   pod, PVC, and session state. Use `hibernate` when you only want to stop
   compute while preserving state.
+
+Anywhere a command takes an agent, its id, slug, or owner-chosen name are
+interchangeable. `chariot rename <agent> <name>` sets the name (`--clear`
+removes it); it shows in the NAME column of `chariot list`. Names are 1-63
+lowercase letters, digits, or hyphens, unique within your fleet — the slug and
+id never change, so renaming is safe at any time.
 
 ## Demo: smoke-test the round-trip without a backend
 

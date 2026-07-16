@@ -81,7 +81,7 @@ the fleet default. Either way it takes effect immediately.`,
 }
 
 func init() {
-	modelsSetCmd.Flags().StringVar(&modelsSetAgent, "agent", "", "override just this agent id (default: the whole fleet)")
+	modelsSetCmd.Flags().StringVar(&modelsSetAgent, "agent", "", "override just this agent — id, slug, or name (default: the whole fleet)")
 	modelsCmd.AddCommand(modelsSetCmd)
 	rootCmd.AddCommand(modelsCmd)
 }
