@@ -21,7 +21,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 		tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "AGENT ID\tSLUG\tSTATE\tIMAGE\tMODEL\tHIBERNATE")
+		fmt.Fprintln(tw, "AGENT ID\tSLUG\tNAME\tSTATE\tIMAGE\tMODEL\tHIBERNATE")
 
 		cursor := ""
 		shown := 0
@@ -31,6 +31,10 @@ var listCmd = &cobra.Command{
 				return err
 			}
 			for _, a := range page.Agents {
+				name := "-" // never named (`chariot rename` sets one)
+				if a.Name != nil {
+					name = *a.Name
+				}
 				image := "default" // account default: custom image if verified, else stock
 				if a.Image != nil {
 					image = *a.Image
@@ -43,7 +47,7 @@ var listCmd = &cobra.Command{
 				if a.HibernateAfterSeconds != nil {
 					hibernate = formatDDHHMM(*a.HibernateAfterSeconds)
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Slug, a.State, image, model, hibernate)
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Slug, name, a.State, image, model, hibernate)
 				shown++
 			}
 			cursor = page.NextCursor

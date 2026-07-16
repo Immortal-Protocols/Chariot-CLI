@@ -209,11 +209,28 @@ func (c *Client) SetDefaultImage(ctx context.Context, image string) (string, err
 type Agent struct {
 	ID    string  `json:"id"`
 	Slug  string  `json:"slug"`
+	Name  *string `json:"name"` // owner-chosen alias (`chariot rename`); nil = unnamed
 	State string  `json:"state"`
 	Image *string `json:"image"` // built-in image name; nil = account default
 	Model *string `json:"model"` // OpenRouter model id; nil = account default
 	// Idle window (seconds) before this agent hibernates; nil = account default.
 	HibernateAfterSeconds *int64 `json:"hibernate_after_seconds"`
+}
+
+// SetAgentName names (aliases) ONE agent; an empty name clears it back to
+// unnamed. The name is accepted anywhere an agent id or slug is — the slug
+// stays the stable identifier, so renaming changes no infrastructure. The
+// returned Agent carries the canonical slug and the name after the change.
+func (c *Client) SetAgentName(ctx context.Context, agentRef, name string) (*Agent, error) {
+	body := map[string]any{"name": nil}
+	if name != "" {
+		body["name"] = name
+	}
+	out := &Agent{}
+	if _, err := c.do(ctx, http.MethodPut, "/v1/agents/"+agentRef+"/name", body, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // SetAgentModel overrides ONE agent's model — any OpenRouter model id; an empty

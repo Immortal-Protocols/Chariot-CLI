@@ -126,7 +126,7 @@ func formatDDHHMM(seconds int64) string {
 }
 
 func init() {
-	hibernateAfterSetCmd.Flags().StringVar(&hibernateAfterSetAgent, "agent", "", "override just this agent id (default: the whole fleet)")
+	hibernateAfterSetCmd.Flags().StringVar(&hibernateAfterSetAgent, "agent", "", "override just this agent — id, slug, or name (default: the whole fleet)")
 	hibernateAfterCmd.AddCommand(hibernateAfterSetCmd)
 	rootCmd.AddCommand(hibernateAfterCmd)
 }
